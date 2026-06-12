@@ -97,6 +97,7 @@ export default function App() {
   const [unsignedHex, setUnsignedHex] = useState('')
   const [partialSign, setPartialSign] = useState(false)
   const [signedHex, setSignedHex] = useState<string | null>(null)
+  const [witnessHex, setWitnessHex] = useState<string | null>(null)
   const [providedSignedHex, setProvidedSignedHex] = useState('')
   const [txId, setTxId] = useState<string | null>(null)
 
@@ -124,6 +125,7 @@ export default function App() {
     if (next === mode) return
     setMode(next)
     setSignedHex(null)
+    setWitnessHex(null)
     setProvidedSignedHex('')
     setTxId(null)
     setSignStatus(idle)
@@ -156,11 +158,15 @@ export default function App() {
     }
     setSignStatus({ kind: 'busy', message: 'Awaiting wallet signature…' })
     setSignedHex(null)
+    setWitnessHex(null)
     setTxId(null)
     setSubmitStatus(idle)
     try {
       const witnessHex = await api.signTx(hex, partialSign)
       const merged = mergeWitness(hex, witnessHex)
+      console.log('Wallet witness (hex):', witnessHex)
+      console.log('Signed transaction (hex):', merged)
+      setWitnessHex(witnessHex)
       setSignedHex(merged)
       setSignStatus({ kind: 'ok', message: 'Transaction signed.' })
     } catch (e) {
@@ -257,6 +263,7 @@ export default function App() {
                   setConnectedName('')
                   setNetworkId(null)
                   setSignedHex(null)
+                  setWitnessHex(null)
                   setProvidedSignedHex('')
                   setTxId(null)
                   setSignStatus(idle)
@@ -338,6 +345,21 @@ export default function App() {
               <pre className="mt-1 max-h-48 overflow-auto rounded-md border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-xs text-slate-100 whitespace-pre-wrap break-all">
                 {signedHex}
               </pre>
+              {witnessHex && (
+                <details className="mt-3 rounded-md border border-slate-700 bg-slate-900/60">
+                  <summary className="cursor-pointer select-none px-3 py-2 text-sm text-slate-300 hover:text-slate-100">
+                    Wallet witness (hex)
+                  </summary>
+                  <div className="px-3 pb-3">
+                    <div className="flex items-center justify-end">
+                      <CopyButton value={witnessHex} />
+                    </div>
+                    <pre className="mt-1 max-h-48 overflow-auto rounded-md border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-xs text-slate-100 whitespace-pre-wrap break-all">
+                      {witnessHex}
+                    </pre>
+                  </div>
+                </details>
+              )}
             </div>
           )}
         </Section>
