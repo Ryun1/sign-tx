@@ -89,6 +89,7 @@ export default function App() {
   const [networkId, setNetworkId] = useState<number | null>(null)
 
   const [unsignedHex, setUnsignedHex] = useState('')
+  const [partialSign, setPartialSign] = useState(false)
   const [signedHex, setSignedHex] = useState<string | null>(null)
   const [txId, setTxId] = useState<string | null>(null)
 
@@ -144,7 +145,7 @@ export default function App() {
     setTxId(null)
     setSubmitStatus(idle)
     try {
-      const witnessHex = await api.signTx(hex, false)
+      const witnessHex = await api.signTx(hex, partialSign)
       const merged = mergeWitness(hex, witnessHex)
       setSignedHex(merged)
       setSignStatus({ kind: 'ok', message: 'Transaction signed.' })
@@ -247,6 +248,19 @@ export default function App() {
             placeholder="84a40081825820…"
             className="mt-1 w-full font-mono text-xs rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 disabled:opacity-60"
           />
+          <label className="mt-3 flex items-center gap-2 text-sm text-slate-300">
+            <input
+              type="checkbox"
+              checked={partialSign}
+              onChange={(e) => setPartialSign(e.target.checked)}
+              disabled={!api}
+              className="h-4 w-4 rounded border-slate-600 bg-slate-950 accent-indigo-600 disabled:opacity-60"
+            />
+            Partial sign
+            <span className="text-slate-500">
+              (don&apos;t require all witnesses; for multi-sig)
+            </span>
+          </label>
           <button
             type="button"
             onClick={onSign}
