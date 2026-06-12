@@ -9,6 +9,11 @@ type Status = { kind: StatusKind; message?: string }
 
 const idle: Status = { kind: 'idle' }
 
+type Mode = 'sign' | 'submit'
+
+const hexError =
+  'Input does not look like hex (must be even length, only 0-9 and a-f).'
+
 function describeError(e: unknown): string {
   if (e instanceof Error) return e.message
   if (typeof e === 'string') return e
@@ -88,9 +93,11 @@ export default function App() {
   const [connectedName, setConnectedName] = useState<string>('')
   const [networkId, setNetworkId] = useState<number | null>(null)
 
+  const [mode, setMode] = useState<Mode>('sign')
   const [unsignedHex, setUnsignedHex] = useState('')
   const [partialSign, setPartialSign] = useState(false)
   const [signedHex, setSignedHex] = useState<string | null>(null)
+  const [providedSignedHex, setProvidedSignedHex] = useState('')
   const [txId, setTxId] = useState<string | null>(null)
 
   const [connectStatus, setConnectStatus] = useState<Status>(idle)
@@ -111,6 +118,17 @@ export default function App() {
 
   const canSign = api !== null && unsignedHex.trim().length > 0
   const canSubmit = api !== null && signedHex !== null
+  const canSubmitProvided = api !== null && providedSignedHex.trim().length > 0
+
+  function switchMode(next: Mode) {
+    if (next === mode) return
+    setMode(next)
+    setSignedHex(null)
+    setProvidedSignedHex('')
+    setTxId(null)
+    setSignStatus(idle)
+    setSubmitStatus(idle)
+  }
 
   async function onConnect(w: DiscoveredWallet) {
     setConnectStatus({ kind: 'busy', message: `Connecting to ${w.provider.name}…` })
@@ -133,11 +151,7 @@ export default function App() {
     if (!api) return
     const hex = unsignedHex.trim()
     if (!isLikelyHex(hex)) {
-      setSignStatus({
-        kind: 'error',
-        message:
-          'Input does not look like hex (must be even length, only 0-9 and a-f).',
-      })
+      setSignStatus({ kind: 'error', message: hexError })
       return
     }
     setSignStatus({ kind: 'busy', message: 'Awaiting wallet signature…' })
@@ -154,16 +168,31 @@ export default function App() {
     }
   }
 
-  async function onSubmit() {
-    if (!api || !signedHex) return
+  async function submitHex(hex: string) {
+    if (!api) return
     setSubmitStatus({ kind: 'busy', message: 'Submitting transaction…' })
+    setTxId(null)
     try {
-      const id = await api.submitTx(signedHex)
+      const id = await api.submitTx(hex)
       setTxId(id)
       setSubmitStatus({ kind: 'ok', message: 'Submitted.' })
     } catch (e) {
       setSubmitStatus({ kind: 'error', message: describeError(e) })
     }
+  }
+
+  function onSubmitSigned() {
+    if (!signedHex) return
+    submitHex(signedHex)
+  }
+
+  function onSubmitProvided() {
+    const hex = providedSignedHex.trim()
+    if (!isLikelyHex(hex)) {
+      setSubmitStatus({ kind: 'error', message: hexError })
+      return
+    }
+    submitHex(hex)
   }
 
   const explorerHref = useMemo(
@@ -181,6 +210,34 @@ export default function App() {
             and submit it.
           </p>
         </header>
+
+        <div
+          role="tablist"
+          aria-label="Mode"
+          className="inline-flex rounded-lg border border-slate-700 bg-slate-900/60 p-1 text-sm"
+        >
+          {(
+            [
+              ['sign', 'Sign & submit'],
+              ['submit', 'Submit only'],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              role="tab"
+              aria-selected={mode === value}
+              onClick={() => switchMode(value)}
+              className={`rounded-md px-3 py-1.5 font-medium ${
+                mode === value
+                  ? 'bg-indigo-600 text-white'
+                  : 'text-slate-300 hover:text-slate-100'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
 
         <Section step={1} title="Connect wallet">
           {api ? (
@@ -200,6 +257,7 @@ export default function App() {
                   setConnectedName('')
                   setNetworkId(null)
                   setSignedHex(null)
+                  setProvidedSignedHex('')
                   setTxId(null)
                   setSignStatus(idle)
                   setSubmitStatus(idle)
@@ -235,6 +293,7 @@ export default function App() {
           <StatusBanner status={connectStatus} />
         </Section>
 
+        {mode === 'sign' && (
         <Section step={2} title="Sign transaction" disabled={!api}>
           <label className="block text-sm text-slate-300">
             Unsigned transaction (hex / CBOR)
@@ -282,12 +341,36 @@ export default function App() {
             </div>
           )}
         </Section>
+        )}
 
-        <Section step={3} title="Submit transaction" disabled={!canSubmit}>
+        <Section
+          step={mode === 'sign' ? 3 : 2}
+          title="Submit transaction"
+          disabled={mode === 'sign' ? !canSubmit : !api}
+        >
+          {mode === 'submit' && (
+            <>
+              <label className="block text-sm text-slate-300">
+                Signed transaction (hex / CBOR)
+              </label>
+              <textarea
+                value={providedSignedHex}
+                onChange={(e) => setProvidedSignedHex(e.target.value)}
+                disabled={!api}
+                rows={8}
+                spellCheck={false}
+                placeholder="84a40081825820…"
+                className="mt-1 mb-3 w-full font-mono text-xs rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 disabled:opacity-60"
+              />
+            </>
+          )}
           <button
             type="button"
-            onClick={onSubmit}
-            disabled={!canSubmit || submitStatus.kind === 'busy'}
+            onClick={mode === 'sign' ? onSubmitSigned : onSubmitProvided}
+            disabled={
+              (mode === 'sign' ? !canSubmit : !canSubmitProvided) ||
+              submitStatus.kind === 'busy'
+            }
             className="inline-flex items-center rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {submitStatus.kind === 'busy' ? 'Submitting…' : 'Submit transaction'}
